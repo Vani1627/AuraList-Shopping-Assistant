@@ -4,15 +4,17 @@ from datetime import datetime
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-# Removed: from google.cloud.firestore_v1.query import FieldFilter
-# This import caused persistent errors, so we'll revert to using positional arguments for .where()
+from flask import Flask, render_template, request, jsonify
 
+# 1. Initialize Flask app IMMEDIATELY after imports
+# This ensures 'Flask' is defined and 'app' is created reliably.
+app = Flask(__name__)
 
-# --- Firebase Initialization ---
-# IMPORTANT: DO NOT commit this file to GitHub! Add it to .gitignore.
-# For Vercel deployment, you will set GOOGLE_APPLICATION_CREDENTIALS_JSON
-# as an environment variable in Vercel, containing the JSON string content.
+# 2. Initialize Firebase Admin SDK and Firestore client (db)
+# This block runs before any routes are registered or app context is implicitly pushed.
+# 'db' needs to be globally accessible for the app context block and routes.
 SERVICE_ACCOUNT_KEY_PATH_LOCAL = 'firebase-service-account.json'
+db = None # Initialize db to None, will be assigned if Firebase init is successful
 
 cred = None
 if 'GOOGLE_APPLICATION_CREDENTIALS_JSON' in os.environ:
@@ -27,7 +29,6 @@ if 'GOOGLE_APPLICATION_CREDENTIALS_JSON' in os.environ:
     except Exception as e:
         print(f"Error creating Firebase credentials from environment variable: {e}")
 elif os.path.exists(SERVICE_ACCOUNT_KEY_PATH_LOCAL):
-    # Fixed typo here: SERVICE_SERVICE_ACCOUNT_KEY_PATH_LOCAL -> SERVICE_ACCOUNT_KEY_PATH_LOCAL
     cred = credentials.Certificate(SERVICE_ACCOUNT_KEY_PATH_LOCAL)
     print(f"Firebase credentials loaded from local file: {SERVICE_ACCOUNT_KEY_PATH_LOCAL}")
 else:
@@ -36,62 +37,67 @@ else:
 
 if cred:
     try:
-        # Check if app is already initialized to avoid ValueError in Flask's debug mode restarts
         if not firebase_admin._apps:
             firebase_admin.initialize_app(cred)
-        db = firestore.client()
+        db = firestore.client() # Assign the firestore client to the global db variable
         print("Firebase Admin SDK initialized successfully.")
     except ValueError as e:
         print(f"Firebase Admin SDK already initialized or invalid options: {e}")
-        # If it's already initialized, just get the client
-        db = firestore.client()
+        db = firestore.client() # Still get the client if already initialized
 else:
-    print("Firebase Admin SDK could not be initialized due to missing/invalid credentials. Exiting.")
-    exit()
+    print("Firebase Admin SDK could not be initialized. `db` client will be None.")
+    # No 'exit()' here; app will continue but may fail if 'db' is required.
 
-app = Flask(__name__)
-
-# --- Database Initialization and Recipe Population (Adapted for Firestore) ---
+# 3. Database Initialization and Recipe Population (uses app_context and 'db')
+# This block ensures database setup and runs within the Flask application context.
 with app.app_context():
-    setup_doc_ref = db.collection('app_meta').document('setup')
-    setup_doc = setup_doc_ref.get()
+    if db: # Only proceed with Firestore operations if 'db' was successfully initialized
+        setup_doc_ref = db.collection('app_meta').document('setup')
+        setup_doc = setup_doc_ref.get()
 
-    if not setup_doc.exists or not setup_doc.to_dict().get('recipes_populated'):
-        print("Populating recipe database for Firestore...")
-        # Import RECIPES_DATA locally within this function or ensure it's globally available
-        from recipe_manager import RECIPES_DATA
-        
-        default_list_doc_ref = db.collection('shopping_lists').document('my_shopping_list')
-        if not default_list_doc_ref.get().exists:
-            default_list_doc_ref.set({"name": "My Shopping List"})
-            print("Created default shopping list document in Firestore.")
-
-        for dish_name, ingredients_list in RECIPES_DATA.items():
-            recipe_doc_ref = db.collection('recipes').document(dish_name.lower())
+        if not setup_doc.exists or not setup_doc.to_dict().get('recipes_populated'):
+            print("Populating recipe database for Firestore...")
+            from recipe_manager import RECIPES_DATA
             
-            if not recipe_doc_ref.get().exists:
-                recipe_doc_ref.set({"name": dish_name})
-                
-                for ingredient_name in ingredients_list:
-                    recipe_doc_ref.collection('ingredients').add({"name": ingredient_name})
-                print(f"Added recipe: {dish_name} and its ingredients to Firestore.")
-            else:
-                print(f"Recipe '{dish_name}' already exists in Firestore. Skipping population.")
-        
-        setup_doc_ref.set({'recipes_populated': True, 'last_populated': firestore.SERVER_TIMESTAMP})
-        print("Recipe database population complete for Firestore.")
-    else:
-        print("Firestore recipes already populated. Skipping initial recipe population.")
+            default_list_doc_ref = db.collection('shopping_lists').document('my_shopping_list')
+            if not default_list_doc_ref.get().exists:
+                default_list_doc_ref.set({"name": "My Shopping List"})
+                print("Created default shopping list document in Firestore.")
 
+            for dish_name, ingredients_list in RECIPES_DATA.items():
+                recipe_doc_ref = db.collection('recipes').document(dish_name.lower())
+                
+                if not recipe_doc_ref.get().exists:
+                    recipe_doc_ref.set({"name": dish_name})
+                    
+                    for ingredient_name in ingredients_list:
+                        recipe_doc_ref.collection('ingredients').add({"name": ingredient_name})
+                    print(f"Added recipe: {dish_name} and its ingredients to Firestore.")
+                else:
+                    print(f"Recipe '{dish_name}' already exists in Firestore. Skipping population.")
+            
+            setup_doc_ref.set({'recipes_populated': True, 'last_populated': firestore.SERVER_TIMESTAMP})
+            print("Recipe database population complete for Firestore.")
+        else:
+            print("Firestore recipes already populated. Skipping initial recipe population.")
+    else:
+        print("Skipping Firestore database population due to uninitialized Firebase Admin SDK.")
+
+
+# --- Frontend Route ---
 @app.route('/')
 def index():
+    """
+    Renders the main web application page (index.html).
+    Fetches initial shopping list items and recommendations to display.
+    """
     current_list_doc_ref = db.collection('shopping_lists').document('my_shopping_list')
     current_list_doc = current_list_doc_ref.get()
     items = []
     recommendations = []
 
     if current_list_doc.exists:
-        # Reverted to positional arguments for .where()
+        # Using positional arguments for .where() as per previous fix
         items_query = db.collection('list_items').where('list_id', '==', current_list_doc.id).where('is_bought', '==', False).order_by('added_timestamp', direction=firestore.Query.DESCENDING).stream()
         
         for item_doc in items_query:
@@ -116,8 +122,7 @@ def index():
 
     return render_template('index.html', items=items, recommendations=recommendations)
 
-# --- API Routes - Moved Outside of index() Function ---
-
+# --- API Routes for Voice Commands ---
 @app.route('/api/process_voice_command', methods=['POST'])
 def process_voice_command_api():
     print("--- process_voice_command_api route hit! ---") # Debugging print
@@ -128,7 +133,6 @@ def process_voice_command_api():
         return jsonify({"status": "error", "message": "No command provided."}), 400
 
     print(f"\n--- Received Command Text: '{command_text}' ---")
-    # Import process_command locally within this function
     from nlp_model import process_command 
     nlp_output = process_command(command_text)
     intent = nlp_output['intent']
@@ -153,7 +157,6 @@ def process_voice_command_api():
             quantity = item_obj.get('quantity', '1')
             unit = item_obj.get('unit', '')
 
-            # Reverted to positional arguments for .where()
             existing_items_query = db.collection('list_items').where('list_id', '==', current_list_id)\
                                     .where('item_name', '==', item_name).where('quantity', '==', quantity)\
                                     .where('unit', '==', unit).where('is_bought', '==', False).limit(1).stream()
@@ -200,54 +203,45 @@ def process_voice_command_api():
         if nlp_output['dish_name']: # If a dish name is provided (e.g., "delete biryani items")
             dish_name_lower = nlp_output['dish_name'].lower()
             
-            # Retrieve all unbought items for the current list
-            # Reverted to positional arguments for .where()
             all_unbought_items_query = db.collection('list_items').where('list_id', '==', current_list_id)\
                                         .where('is_bought', '==', False).stream()
             
             items_to_consider_for_deletion = []
             for doc in all_unbought_items_query:
                 item_data = doc.to_dict()
-                item_data['id'] = doc.id # Add ID for reference
+                item_data['id'] = doc.id
                 items_to_consider_for_deletion.append(item_data)
 
-            # 1. Match items by dish name in their note (e.g., "for chitranna")
             for item_data in items_to_consider_for_deletion:
                 note_content = item_data.get('note', '').lower()
                 if f"for {dish_name_lower}" in note_content:
                     items_to_delete_refs.append(db.collection('list_items').document(item_data['id']))
                     deleted_item_names.append(f"{item_data.get('quantity', '')} {item_data.get('unit', '')} {item_data.get('item_name', '')}".strip())
             
-            # 2. Match items by ingredient name for the given dish
             from recipe_manager import RECIPES_DATA
             recipe_ingredients = RECIPES_DATA.get(dish_name_lower, [])
             
             if recipe_ingredients:
                 for ingredient_name in recipe_ingredients:
                     for item_data in items_to_consider_for_deletion:
-                        # Check if item name matches an ingredient and hasn't been marked for deletion yet
                         if item_data['item_name'].lower() == ingredient_name.lower() and \
                            db.collection('list_items').document(item_data['id']) not in items_to_delete_refs:
                             
                             items_to_delete_refs.append(db.collection('list_items').document(item_data['id']))
                             deleted_item_names.append(f"{item_data.get('quantity', '')} {item_data.get('unit', '')} {item_data.get('item_name', '')}".strip())
             
-            # Remove duplicates from deleted_item_names (if an item matched by note AND ingredient)
             deleted_item_names = list(dict.fromkeys(deleted_item_names))
 
             if not items_to_delete_refs:
                 response_message = f"No items related to '{nlp_output['dish_name']}' found on your list to remove."
                 status_type = "info"
 
-        else: # Regular item removal (e.g., "remove bread" - items array populated by NLP)
-            # Iterate through the structured item objects from NLP
+        else: # Regular item removal
             for item_obj in nlp_output['items']:
                 item_name_nlp = item_obj['name']
                 quantity_nlp = item_obj.get('quantity', '1')
                 unit_nlp = item_obj.get('unit', '')
 
-                # Query for a specific item, matching quantity and unit if provided by NLP
-                # Reverted to positional arguments for .where()
                 query = db.collection('list_items').where('list_id', '==', current_list_id)\
                           .where('item_name', '==', item_name_nlp).where('is_bought', '==', False)
                 if quantity_nlp and quantity_nlp != '1':
@@ -266,15 +260,14 @@ def process_voice_command_api():
                 response_message = "Could not find those items on your list to remove."
                 status_type = "info"
 
-        # Perform deletion for all collected item references
         for item_ref in items_to_delete_refs:
-            item_data = item_ref.get().to_dict() # Re-fetch to log correct item_name before deletion
-            item_ref.delete() # Delete from Firestore
+            item_data = item_ref.get().to_dict()
+            item_ref.delete()
             user_history_data = {
                 "item_name": item_data.get('item_name', 'Unknown Item'),
                 "timestamp": firestore.SERVER_TIMESTAMP,
                 "action_type": 'removed',
-                "list_item_id": item_ref.id # Store the ID of the removed item
+                "list_item_id": item_ref.id
             }
             db.collection('user_history').add(user_history_data)
             removed_count += 1
@@ -283,7 +276,7 @@ def process_voice_command_api():
             response_message = f"Removed {', '.join(deleted_item_names)} from your list."
             status_type = "success"
         elif status_type != "info": 
-            pass # Keep previous info message if set
+            pass
         else: 
             response_message = "No items found to remove."
             status_type = "info"
@@ -297,7 +290,6 @@ def process_voice_command_api():
             quantity_nlp = item_obj.get('quantity', '1')
             unit_nlp = item_obj.get('unit', '')
 
-            # Reverted to positional arguments for .where()
             query = db.collection('list_items').where('list_id', '==', current_list_id)\
                       .where('item_name', '==', item_name_nlp).where('is_bought', '==', False)
             if quantity_nlp and quantity_nlp != '1':
@@ -344,7 +336,6 @@ def process_voice_command_api():
                 
                 added_recipe_items = []
                 for ingredient_name in ingredients:
-                    # Reverted to positional arguments for .where()
                     existing_item_query = db.collection('list_items').where('list_id', '==', current_list_id)\
                                         .where('item_name', '==', ingredient_name).where('is_bought', '==', False).limit(1).stream()
                     existing_item_doc = next(existing_item_query, None)
@@ -387,11 +378,9 @@ def process_voice_command_api():
             response_message = "Please tell me which dish you want ingredients for."
             status_type = "warning"
         
-        # This return handles 'get_recipe_ingredients' specific responses, so it should stay inside
         return jsonify({"status": status_type, "message": response_message})
 
     # --- DEFAULT RETURN FOR UNHANDLED INTENTS ---
-    # This ensures a response is always returned if none of the above intents are matched.
     return jsonify({"status": status_type, "message": response_message})
 
 
@@ -404,7 +393,6 @@ def get_list_items_api():
         return jsonify([]), 200
 
     items_for_display = []
-    # Reverted to positional arguments for .where()
     items_query = db.collection('list_items').where('list_id', '==', current_list_doc.id).where('is_bought', '==', False).order_by('added_timestamp', direction=firestore.Query.DESCENDING).stream()
     
     for item_doc in items_query:
@@ -433,7 +421,6 @@ def get_recommendations_api():
     if not current_list_doc.exists:
         return jsonify(["Milk", "Eggs", "Bread", "Coffee"]), 200
 
-    # Import get_smart_recommendations locally within this function
     from recommender import get_smart_recommendations
     recommendations = get_smart_recommendations(db, current_list_doc.id) 
 
@@ -488,7 +475,7 @@ def toggle_item_bought():
             "item_name": item_data.get('item_name', 'Unknown Item'),
             "timestamp": firestore.SERVER_TIMESTAMP,
             "action_type": action,
-            "list_item_id": item_doc.id # Corrected reference here
+            "list_item_id": item_doc.id
         }
         db.collection('user_history').add(user_history_data)
         
@@ -525,7 +512,6 @@ def delete_item_api():
         return jsonify({"status": "success", "message": f"Item '{display_name}' deleted."}), 200
     return jsonify({"status": "error", "message": "Item not found."}), 404
 
-# NEW: API endpoint to clear the entire shopping list
 @app.route('/api/clear_list', methods=['POST'])
 def clear_list_api():
     """
@@ -540,10 +526,8 @@ def clear_list_api():
     current_list_id = current_list_doc.id
 
     try:
-        # Get all items in the list_items subcollection for the current list
         items_to_delete_stream = db.collection('list_items').where('list_id', '==', current_list_id).stream()
         
-        # Collect references to delete in a batch
         batch = db.batch()
         deleted_count = 0
         for item_doc in items_to_delete_stream:
@@ -551,7 +535,7 @@ def clear_list_api():
             deleted_count += 1
         
         if deleted_count > 0:
-            batch.commit() # Execute the batch delete
+            batch.commit()
             return jsonify({"status": "success", "message": f"Cleared {deleted_count} items from shopping list."}), 200
         else:
             return jsonify({"status": "info", "message": "Shopping list is already empty."}), 200
