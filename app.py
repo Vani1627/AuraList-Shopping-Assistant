@@ -4,8 +4,8 @@ from datetime import datetime
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-# Corrected import for FieldFilter, targeting the specific _v1.query module
-from google.cloud.firestore_v1.query import FieldFilter
+# Removed: from google.cloud.firestore_v1.query import FieldFilter
+# This import caused persistent errors, so we'll revert to using positional arguments for .where()
 
 
 # --- Firebase Initialization ---
@@ -91,7 +91,8 @@ def index():
     recommendations = []
 
     if current_list_doc.exists:
-        items_query = db.collection('list_items').where(FieldFilter('list_id', '==', current_list_doc.id)).where(FieldFilter('is_bought', '==', False)).order_by('added_timestamp', direction=firestore.Query.DESCENDING).stream()
+        # Reverted to positional arguments for .where()
+        items_query = db.collection('list_items').where('list_id', '==', current_list_doc.id).where('is_bought', '==', False).order_by('added_timestamp', direction=firestore.Query.DESCENDING).stream()
         
         for item_doc in items_query:
             item_data = item_doc.to_dict()
@@ -152,9 +153,10 @@ def process_voice_command_api():
             quantity = item_obj.get('quantity', '1')
             unit = item_obj.get('unit', '')
 
-            existing_items_query = db.collection('list_items').where(FieldFilter('list_id', '==', current_list_id))\
-                                    .where(FieldFilter('item_name', '==', item_name)).where(FieldFilter('quantity', '==', quantity))\
-                                    .where(FieldFilter('unit', '==', unit)).where(FieldFilter('is_bought', '==', False)).limit(1).stream()
+            # Reverted to positional arguments for .where()
+            existing_items_query = db.collection('list_items').where('list_id', '==', current_list_id)\
+                                    .where('item_name', '==', item_name).where('quantity', '==', quantity)\
+                                    .where('unit', '==', unit).where('is_bought', '==', False).limit(1).stream()
             existing_item_doc = next(existing_items_query, None)
 
             if not existing_item_doc:
@@ -199,8 +201,9 @@ def process_voice_command_api():
             dish_name_lower = nlp_output['dish_name'].lower()
             
             # Retrieve all unbought items for the current list
-            all_unbought_items_query = db.collection('list_items').where(FieldFilter('list_id', '==', current_list_id))\
-                                        .where(FieldFilter('is_bought', '==', False)).stream()
+            # Reverted to positional arguments for .where()
+            all_unbought_items_query = db.collection('list_items').where('list_id', '==', current_list_id)\
+                                        .where('is_bought', '==', False).stream()
             
             items_to_consider_for_deletion = []
             for doc in all_unbought_items_query:
@@ -244,12 +247,13 @@ def process_voice_command_api():
                 unit_nlp = item_obj.get('unit', '')
 
                 # Query for a specific item, matching quantity and unit if provided by NLP
-                query = db.collection('list_items').where(FieldFilter('list_id', '==', current_list_id))\
-                          .where(FieldFilter('item_name', '==', item_name_nlp)).where(FieldFilter('is_bought', '==', False))
+                # Reverted to positional arguments for .where()
+                query = db.collection('list_items').where('list_id', '==', current_list_id)\
+                          .where('item_name', '==', item_name_nlp).where('is_bought', '==', False)
                 if quantity_nlp and quantity_nlp != '1':
-                    query = query.where(FieldFilter('quantity', '==', quantity_nlp))
+                    query = query.where('quantity', '==', quantity_nlp)
                 if unit_nlp:
-                    query = query.where(FieldFilter('unit', '==', unit_nlp))
+                    query = query.where('unit', '==', unit_nlp)
                 
                 item_to_remove_doc = next(query.limit(1).stream(), None)
 
@@ -293,12 +297,13 @@ def process_voice_command_api():
             quantity_nlp = item_obj.get('quantity', '1')
             unit_nlp = item_obj.get('unit', '')
 
-            query = db.collection('list_items').where(FieldFilter('list_id', '==', current_list_id))\
-                      .where(FieldFilter('item_name', '==', item_name_nlp)).where(FieldFilter('is_bought', '==', False))
+            # Reverted to positional arguments for .where()
+            query = db.collection('list_items').where('list_id', '==', current_list_id)\
+                      .where('item_name', '==', item_name_nlp).where('is_bought', '==', False)
             if quantity_nlp and quantity_nlp != '1':
-                query = query.where(FieldFilter('quantity', '==', quantity_nlp))
+                query = query.where('quantity', '==', quantity_nlp)
             if unit_nlp:
-                query = query.where(FieldFilter('unit', '==', unit_nlp))
+                query = query.where('unit', '==', unit_nlp)
             
             item_to_mark_doc = next(query.limit(1).stream(), None)
 
@@ -339,8 +344,9 @@ def process_voice_command_api():
                 
                 added_recipe_items = []
                 for ingredient_name in ingredients:
-                    existing_item_query = db.collection('list_items').where(FieldFilter('list_id', '==', current_list_id))\
-                                        .where(FieldFilter('item_name', '==', ingredient_name)).where(FieldFilter('is_bought', '==', False)).limit(1).stream()
+                    # Reverted to positional arguments for .where()
+                    existing_item_query = db.collection('list_items').where('list_id', '==', current_list_id)\
+                                        .where('item_name', '==', ingredient_name).where('is_bought', '==', False).limit(1).stream()
                     existing_item_doc = next(existing_item_query, None)
                     
                     if not existing_item_doc:
@@ -398,7 +404,8 @@ def get_list_items_api():
         return jsonify([]), 200
 
     items_for_display = []
-    items_query = db.collection('list_items').where(FieldFilter('list_id', '==', current_list_doc.id)).where(FieldFilter('is_bought', '==', False)).order_by('added_timestamp', direction=firestore.Query.DESCENDING).stream()
+    # Reverted to positional arguments for .where()
+    items_query = db.collection('list_items').where('list_id', '==', current_list_doc.id).where('is_bought', '==', False).order_by('added_timestamp', direction=firestore.Query.DESCENDING).stream()
     
     for item_doc in items_query:
         item_data = item_doc.to_dict()
@@ -534,7 +541,7 @@ def clear_list_api():
 
     try:
         # Get all items in the list_items subcollection for the current list
-        items_to_delete_stream = db.collection('list_items').where(FieldFilter('list_id', '==', current_list_id)).stream()
+        items_to_delete_stream = db.collection('list_items').where('list_id', '==', current_list_id).stream()
         
         # Collect references to delete in a batch
         batch = db.batch()
