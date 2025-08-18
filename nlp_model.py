@@ -30,7 +30,7 @@ KNOWN_DISHES = [
     "set dosa", "masala dosa", "raagi mudde", "bisi bele bath", "akki roti",
     "ragi rotti", "mysore pak", "obbattu / holige", "kesari bath", "chitranna",
     "puliyogare", "kadubu", "thatte idli", "benne dosa", "chow chow bath",
-    "neer dosa", "goli bajji", "mangalore bonda", "rava dosa", "vegetable kurma",
+    "neer dosa", "goli bajji", "mangalore bonda", "rava dosa", "vegetable kurma", "vegetable kuruma",
     "wheat dosa", "adai dosa", "kuzhi paniyaram", "kozhukattai", "semiya upma",
     "pulav", "veg stew", "chicken stew", "veg biryani", "chicken biryani",
     "egg curry", "fish curry", "parippu curry", "erissery", "thoran",
@@ -96,9 +96,12 @@ def process_command(text):
     note = None
     
     # --- Pre-scan for dish_name and primary note (DATE/TIME entities) ---
-    for dish in KNOWN_DISHES:
-        if dish in doc.text:
-            dish_name = dish
+    # Prioritize exact matches first, then partial if needed
+    found_exact_dish = False
+    for dish_candidate in KNOWN_DISHES:
+        if dish_candidate in doc.text: # Direct substring match
+            dish_name = dish_candidate
+            found_exact_dish = True
             break
     
     # Prioritize SpaCy's NER for date/time notes ("next Friday")
@@ -216,34 +219,3 @@ def process_command(text):
         "dish_name": dish_name,
         "note": note
     }
-
-# Example Usage (for testing in VS Code terminal)
-if __name__ == "__main__":
-    print("--- Testing NLP Model ---")
-    print(f"'Add milk and eggs to my list': {process_command('Add milk and eggs to my list.')}")
-    print(f"'Remove bread from the list': {process_command('Remove bread from the list.')}")
-    print(f"'Mark apples as bought': {process_command('Mark apples as bought.')}")
-    print(f"'Next Friday I want to make biryani': {process_command('Next Friday I want to make biryani.')}")
-    print(f"'Can you add ingredients for pasta for dinner tonight?': {process_command('Can you add ingredients for pasta for dinner tonight?')}")
-    print(f"'I need large milk': {process_command('I need large milk')}")
-    print(f"'What's on my list?': {process_command('What\'s on my list?')}")
-    print(f"'Help me with chili recipe': {process_command('Help me with chili recipe')}")
-    print(f"'Add some small bananas': {process_command('Add some small bananas')}")
-    print(f"'Delete biryani items from list.': {process_command('Delete biryani items from list.')}")
-    print(f"'Remove pasta ingredients': {process_command('Remove pasta ingredients')}")
-    print(f"'I thought of doing omelette next Friday': {process_command('I thought of doing omelette next Friday')}")
-    
-    # --- New Test Cases for Quantity and Units ---
-    print(f"\n--- New Quantity/Unit Tests ---")
-    print(f"'Add 2 liters of milk': {process_command('Add 2 liters of milk')}")
-    print(f"'Put 500 grams of chicken on the list': {process_command('Put 500 grams of chicken on the list')}")
-    print(f"'Need one dozen eggs': {process_command('Need one dozen eggs')}")
-    print(f"'Get a pack of butter': {process_command('Get a pack of butter')}")
-    print(f"'Add a few apples for the trip': {process_command('Add a few apples for the trip')}")
-    print(f"'Remove 1.5 pounds of ground beef': {process_command('Remove 1.5 pounds of ground beef')}")
-    # --- Test Cases for South Indian and Italian Dishes ---
-    print(f"\n--- South Indian & Italian Dish Tests ---")
-    print(f"'Add ingredients for dosa': {process_command('Add ingredients for dosa')}")
-    print(f"'I want to cook sambar': {process_command('I want to cook sambar')}")
-    print(f"'Prepare lasagna for dinner': {process_command('Prepare lasagna for dinner')}")
-    print(f"'Get what I need for spaghetti carbonara': {process_command('Get what I need for spaghetti carbonara')}")
