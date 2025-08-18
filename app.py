@@ -5,6 +5,10 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 from flask import Flask, render_template, request, jsonify
 
+# Import FieldFilter explicitly for cleaner syntax and to avoid UserWarnings
+from google.cloud.firestore_v1.query import FieldFilter
+
+
 # --- Firebase Initialization ---
 # IMPORTANT: DO NOT commit this file to GitHub! Add it to .gitignore.
 # For Vercel deployment, you will set GOOGLE_APPLICATION_CREDENTIALS_JSON
@@ -24,7 +28,7 @@ if 'GOOGLE_APPLICATION_CREDENTIALS_JSON' in os.environ:
     except Exception as e:
         print(f"Error creating Firebase credentials from environment variable: {e}")
 elif os.path.exists(SERVICE_ACCOUNT_KEY_PATH_LOCAL):
-    cred = credentials.Certificate(SERVICE_ACCOUNT_KEY_PATH_LOCAL)
+    cred = credentials.Certificate(SERVICE_SERVICE_ACCOUNT_KEY_PATH_LOCAL)
     print(f"Firebase credentials loaded from local file: {SERVICE_ACCOUNT_KEY_PATH_LOCAL}")
 else:
     print("Warning: Firebase service account credentials JSON file not found locally, and GOOGLE_APPLICATION_CREDENTIALS_JSON environment variable is not set or invalid.")
@@ -87,7 +91,7 @@ def index():
     recommendations = []
 
     if current_list_doc.exists:
-        items_query = db.collection('list_items').where('list_id', '==', current_list_doc.id).where('is_bought', '==', False).order_by('added_timestamp', direction=firestore.Query.DESCENDING).stream()
+        items_query = db.collection('list_items').where(FieldFilter('list_id', '==', current_list_doc.id)).where(FieldFilter('is_bought', '==', False)).order_by('added_timestamp', direction=firestore.Query.DESCENDING).stream()
         
         for item_doc in items_query:
             item_data = item_doc.to_dict()
@@ -148,9 +152,9 @@ def process_voice_command_api():
             quantity = item_obj.get('quantity', '1')
             unit = item_obj.get('unit', '')
 
-            existing_items_query = db.collection('list_items').where('list_id', '==', current_list_id)\
-                                    .where('item_name', '==', item_name).where('quantity', '==', quantity)\
-                                    .where('unit', '==', unit).where('is_bought', '==', False).limit(1).stream()
+            existing_items_query = db.collection('list_items').where(FieldFilter('list_id', '==', current_list_id))\
+                                    .where(FieldFilter('item_name', '==', item_name)).where(FieldFilter('quantity', '==', quantity))\
+                                    .where(FieldFilter('unit', '==', unit)).where(FieldFilter('is_bought', '==', False)).limit(1).stream()
             existing_item_doc = next(existing_items_query, None)
 
             if not existing_item_doc:
@@ -195,8 +199,8 @@ def process_voice_command_api():
             dish_name_lower = nlp_output['dish_name'].lower()
             
             # Retrieve all unbought items for the current list
-            all_unbought_items_query = db.collection('list_items').where('list_id', '==', current_list_id)\
-                                        .where('is_bought', '==', False).stream()
+            all_unbought_items_query = db.collection('list_items').where(FieldFilter('list_id', '==', current_list_id))\
+                                        .where(FieldFilter('is_bought', '==', False)).stream()
             
             items_to_consider_for_deletion = []
             for doc in all_unbought_items_query:
@@ -240,12 +244,12 @@ def process_voice_command_api():
                 unit_nlp = item_obj.get('unit', '')
 
                 # Query for a specific item, matching quantity and unit if provided by NLP
-                query = db.collection('list_items').where('list_id', '==', current_list_id)\
-                          .where('item_name', '==', item_name_nlp).where('is_bought', '==', False)
+                query = db.collection('list_items').where(FieldFilter('list_id', '==', current_list_id))\
+                          .where(FieldFilter('item_name', '==', item_name_nlp)).where(FieldFilter('is_bought', '==', False))
                 if quantity_nlp and quantity_nlp != '1':
-                    query = query.where('quantity', '==', quantity_nlp)
+                    query = query.where(FieldFilter('quantity', '==', quantity_nlp))
                 if unit_nlp:
-                    query = query.where('unit', '==', unit_nlp)
+                    query = query.where(FieldFilter('unit', '==', unit_nlp))
                 
                 item_to_remove_doc = next(query.limit(1).stream(), None)
 
@@ -289,12 +293,12 @@ def process_voice_command_api():
             quantity_nlp = item_obj.get('quantity', '1')
             unit_nlp = item_obj.get('unit', '')
 
-            query = db.collection('list_items').where('list_id', '==', current_list_id)\
-                      .where('item_name', '==', item_name_nlp).where('is_bought', '==', False)
+            query = db.collection('list_items').where(FieldFilter('list_id', '==', current_list_id))\
+                      .where(FieldFilter('item_name', '==', item_name_nlp)).where(FieldFilter('is_bought', '==', False))
             if quantity_nlp and quantity_nlp != '1':
-                query = query.where('quantity', '==', quantity_nlp)
+                query = query.where(FieldFilter('quantity', '==', quantity_nlp))
             if unit_nlp:
-                query = query.where('unit', '==', unit_nlp)
+                query = query.where(FieldFilter('unit', '==', unit_nlp))
             
             item_to_mark_doc = next(query.limit(1).stream(), None)
 
@@ -335,8 +339,8 @@ def process_voice_command_api():
                 
                 added_recipe_items = []
                 for ingredient_name in ingredients:
-                    existing_item_query = db.collection('list_items').where('list_id', '==', current_list_id)\
-                                        .where('item_name', '==', ingredient_name).where('is_bought', '==', False).limit(1).stream()
+                    existing_item_query = db.collection('list_items').where(FieldFilter('list_id', '==', current_list_id))\
+                                        .where(FieldFilter('item_name', '==', ingredient_name)).where(FieldFilter('is_bought', '==', False)).limit(1).stream()
                     existing_item_doc = next(existing_item_query, None)
                     
                     if not existing_item_doc:
@@ -394,7 +398,7 @@ def get_list_items_api():
         return jsonify([]), 200
 
     items_for_display = []
-    items_query = db.collection('list_items').where('list_id', '==', current_list_doc.id).where('is_bought', '==', False).order_by('added_timestamp', direction=firestore.Query.DESCENDING).stream()
+    items_query = db.collection('list_items').where(FieldFilter('list_id', '==', current_list_doc.id)).where(FieldFilter('is_bought', '==', False)).order_by('added_timestamp', direction=firestore.Query.DESCENDING).stream()
     
     for item_doc in items_query:
         item_data = item_doc.to_dict()
@@ -477,7 +481,8 @@ def toggle_item_bought():
             "item_name": item_data.get('item_name', 'Unknown Item'),
             "timestamp": firestore.SERVER_TIMESTAMP,
             "action_type": action,
-            "list_item_id": item_to_mark_doc.id
+            # Fix for original code: use item_doc.id instead of item_to_mark_doc.id
+            "list_item_id": item_doc.id
         }
         db.collection('user_history').add(user_history_data)
         
@@ -513,6 +518,41 @@ def delete_item_api():
 
         return jsonify({"status": "success", "message": f"Item '{display_name}' deleted."}), 200
     return jsonify({"status": "error", "message": "Item not found."}), 404
+
+# NEW: API endpoint to clear the entire shopping list
+@app.route('/api/clear_list', methods=['POST'])
+def clear_list_api():
+    """
+    API endpoint to clear all items from the default shopping list in Firestore.
+    """
+    current_list_doc_ref = db.collection('shopping_lists').document('my_shopping_list')
+    current_list_doc = current_list_doc_ref.get()
+
+    if not current_list_doc.exists:
+        return jsonify({"status": "error", "message": "Shopping list not found."}), 404
+
+    current_list_id = current_list_doc.id
+
+    try:
+        # Get all items in the list_items subcollection for the current list
+        items_to_delete_stream = db.collection('list_items').where(FieldFilter('list_id', '==', current_list_id)).stream()
+        
+        # Collect references to delete in a batch
+        batch = db.batch()
+        deleted_count = 0
+        for item_doc in items_to_delete_stream:
+            batch.delete(item_doc.reference)
+            deleted_count += 1
+        
+        if deleted_count > 0:
+            batch.commit() # Execute the batch delete
+            return jsonify({"status": "success", "message": f"Cleared {deleted_count} items from shopping list."}), 200
+        else:
+            return jsonify({"status": "info", "message": "Shopping list is already empty."}), 200
+    except Exception as e:
+        print(f"Error clearing list: {e}")
+        return jsonify({"status": "error", "message": "Error clearing shopping list."}), 500
+
 
 if __name__ == '__main__':
     print("Attempting to run Flask app...")

@@ -3,12 +3,9 @@ import string
 import re
 
 # Load a small English language model.
-try:
-    nlp = spacy.load("en_core_web_sm")
-except OSError:
-    print("SpaCy model 'en_core_web_sm' not found. Downloading it...")
-    spacy.cli.download("en_core_web_sm")
-    nlp = spacy.load("en_core_web_sm")
+# The model should be downloaded as part of the deployment process on Render's build command.
+# Removed the spacy.cli.download logic as it causes timeouts in production.
+nlp = spacy.load("en_core_web_sm")
 
 # Define common command-related words to filter out from item names
 COMMAND_WORDS = set([
@@ -132,7 +129,7 @@ def process_command(text):
                         break
     
     # 2. Remove/Delete Intent
-    elif any(word in doc.text for word in ["remove", "delete"]):
+    elif any(word in doc.text for word in ["remove", "delete", "clear"]): # Added 'clear' here for NLP
         intent = "remove_item"
 
     # 3. Mark Bought Intent
