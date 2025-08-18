@@ -25,7 +25,8 @@ KNOWN_DISHES = [
     "alleppey fish curry", "malabar parotta", "chemmeen curry", "kerala style beef fry",
     "ghee rice", "kozhi porichathu", "kothu parotta", "paniyarappam", "adai",
     "set dosa", "masala dosa", "raagi mudde", "bisi bele bath", "akki roti",
-    "ragi rotti", "mysore pak", "obbattu / holige", "kesari bath", "chitranna",
+    "ragi rotti", "ragi roti",
+    "mysore pak", "obbattu / holige", "kesari bath", "chitranna",
     "puliyogare", "kadubu", "thatte idli", "benne dosa", "chow chow bath",
     "neer dosa", "goli bajji", "mangalore bonda", "rava dosa", "vegetable kurma", "vegetable kuruma",
     "wheat dosa", "adai dosa", "kuzhi paniyaram", "kozhukattai", "semiya upma",
@@ -38,11 +39,14 @@ KNOWN_DISHES = [
     "kuzhambu", "moru curry", "theeyal", "kozhambu kulambu", "kootu",
     "poriyal", "rasavangi", "kozhukattai sweet", "modak", "adai aval",
     "ulundu vadai", "paruppu vadai", "pazham pori", "ullivada", "chakka appam",
-    "idiappam", "veg kurma", "paneer butter masala", "dal makhani", "gobhi manchurian",
-    "chicken 65", "chilli chicken", "palak paneer", "aloo gobi", "matar paneer",
-    "bhindi masala", "chana masala", "rajma chawal", "baingan bharta", "lauki kofta",
-    "malai kofta", "navratan kurma", "dum aloo", "shahi paneer", "dal tadka",
-    "veg kolhapuri", "paneer tikka masala",
+    "idiappam",
+    # --- North Indian/General Indian Dishes (continued from above) ---
+    "paneer butter masala",
+    "dal makhani", "gobhi manchurian", "chicken 65", "chilli chicken",
+    "palak paneer", "aloo gobi", "matar paneer", "bhindi masala", "chana masala",
+    "rajma chawal", "baingan bharta", "lauki kofta", "malai kofta",
+    "navratan kurma", "dum aloo", "shahi paneer", "dal tadka", "veg kolhapuri",
+    "paneer tikka masala",
     # --- 10 Italian Dishes ---
     "lasagna", "spaghetti carbonara", "risotto ai funghi", "gnocchi with pesto",
     "focaccia bread", "minestrone soup", "tiramisu", "arancini", "osso buco", "caprese salad"
@@ -96,7 +100,8 @@ def process_command(text):
     # Prioritize exact matches first, then partial if needed
     found_exact_dish = False
     for dish_candidate in KNOWN_DISHES:
-        if dish_candidate in doc.text: # Direct substring match
+        # Using 'in doc.text' for flexible matching (e.g., "set dosa" matches "dosa")
+        if dish_candidate in doc.text:
             dish_name = dish_candidate
             found_exact_dish = True
             break
