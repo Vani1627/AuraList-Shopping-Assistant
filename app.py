@@ -3,10 +3,10 @@ import json
 from datetime import datetime
 import firebase_admin
 from firebase_admin import credentials, firestore
-from flask import Flask, render_template, request, jsonify
 
-# Import FieldFilter explicitly for cleaner syntax and to avoid UserWarnings
-from google.cloud.firestore_v1.query import FieldFilter
+# Corrected import for FieldFilter
+# This import path is more robust across different google-cloud-firestore versions
+from google.cloud.firestore import FieldFilter
 
 
 # --- Firebase Initialization ---
@@ -28,7 +28,8 @@ if 'GOOGLE_APPLICATION_CREDENTIALS_JSON' in os.environ:
     except Exception as e:
         print(f"Error creating Firebase credentials from environment variable: {e}")
 elif os.path.exists(SERVICE_ACCOUNT_KEY_PATH_LOCAL):
-    cred = credentials.Certificate(SERVICE_SERVICE_ACCOUNT_KEY_PATH_LOCAL)
+    # Fixed typo here: SERVICE_SERVICE_ACCOUNT_KEY_PATH_LOCAL -> SERVICE_ACCOUNT_KEY_PATH_LOCAL
+    cred = credentials.Certificate(SERVICE_ACCOUNT_KEY_PATH_LOCAL)
     print(f"Firebase credentials loaded from local file: {SERVICE_ACCOUNT_KEY_PATH_LOCAL}")
 else:
     print("Warning: Firebase service account credentials JSON file not found locally, and GOOGLE_APPLICATION_CREDENTIALS_JSON environment variable is not set or invalid.")
@@ -481,8 +482,7 @@ def toggle_item_bought():
             "item_name": item_data.get('item_name', 'Unknown Item'),
             "timestamp": firestore.SERVER_TIMESTAMP,
             "action_type": action,
-            # Fix for original code: use item_doc.id instead of item_to_mark_doc.id
-            "list_item_id": item_doc.id
+            "list_item_id": item_doc.id # Corrected reference here
         }
         db.collection('user_history').add(user_history_data)
         
