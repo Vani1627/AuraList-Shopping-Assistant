@@ -1,14 +1,14 @@
 import os
 import json
-from datetime import datetime, timezone # Import timezone for consistent datetime objects
+from datetime import datetime
 import firebase_admin
 from firebase_admin import credentials, firestore
 from flask import Flask, render_template, request, jsonify
 
 # --- Firebase Initialization ---
 # IMPORTANT: DO NOT commit this file to GitHub! Add it to .gitignore.
-# For Render deployment, you will set GOOGLE_APPLICATION_CREDENTIALS_JSON
-# as an environment variable in Render, containing the JSON string content.
+# For Vercel deployment, you will set GOOGLE_APPLICATION_CREDENTIALS_JSON
+# as an environment variable in Vercel, containing the JSON string content.
 SERVICE_ACCOUNT_KEY_PATH_LOCAL = 'firebase-service-account.json'
 
 cred = None
@@ -49,37 +49,31 @@ app = Flask(__name__)
 
 # --- Database Initialization and Recipe Population (Adapted for Firestore) ---
 with app.app_context():
-    # This document keeps track if recipes have been populated to avoid re-running on every startup
     setup_doc_ref = db.collection('app_meta').document('setup')
     setup_doc = setup_doc_ref.get()
 
     if not setup_doc.exists or not setup_doc.to_dict().get('recipes_populated'):
         print("Populating recipe database for Firestore...")
-        # Import RECIPES_DATA locally within this function to avoid circular imports if recipe_manager depends on app
+        # Import RECIPES_DATA locally within this function or ensure it's globally available
         from recipe_manager import RECIPES_DATA
         
-        # Create a default shopping list document if it doesn't exist
         default_list_doc_ref = db.collection('shopping_lists').document('my_shopping_list')
         if not default_list_doc_ref.get().exists:
             default_list_doc_ref.set({"name": "My Shopping List"})
             print("Created default shopping list document in Firestore.")
 
-        # Populate recipes and their ingredients into Firestore collections
         for dish_name, ingredients_list in RECIPES_DATA.items():
-            recipe_doc_ref = db.collection('recipes').document(dish_name.lower()) # Use lower case for consistent document IDs
+            recipe_doc_ref = db.collection('recipes').document(dish_name.lower())
             
-            # Check if recipe already exists to prevent duplicate entries
             if not recipe_doc_ref.get().exists:
-                recipe_doc_ref.set({"name": dish_name}) # Create the recipe document
+                recipe_doc_ref.set({"name": dish_name})
                 
-                # Add each ingredient as a sub-collection document under the recipe
                 for ingredient_name in ingredients_list:
                     recipe_doc_ref.collection('ingredients').add({"name": ingredient_name})
                 print(f"Added recipe: {dish_name} and its ingredients to Firestore.")
             else:
                 print(f"Recipe '{dish_name}' already exists in Firestore. Skipping population.")
         
-        # Mark recipes as populated to skip this block on subsequent runs
         setup_doc_ref.set({'recipes_populated': True, 'last_populated': firestore.SERVER_TIMESTAMP})
         print("Recipe database population complete for Firestore.")
     else:
@@ -87,34 +81,27 @@ with app.app_context():
 
 @app.route('/')
 def index():
-    """
-    Renders the main web application page (index.html).
-    Fetches initial shopping list items and recommendations to display from Firestore.
-    """
     current_list_doc_ref = db.collection('shopping_lists').document('my_shopping_list')
     current_list_doc = current_list_doc_ref.get()
     items = []
     recommendations = []
 
     if current_list_doc.exists:
-        # Fetch unbought items for the default list, ordered by most recently added
-        # Using stream() for generator, then converting to list
         items_query = db.collection('list_items').where('list_id', '==', current_list_doc.id).where('is_bought', '==', False).order_by('added_timestamp', direction=firestore.Query.DESCENDING).stream()
         
         for item_doc in items_query:
             item_data = item_doc.to_dict()
-            item_data['id'] = item_doc.id # Add document ID for frontend use
+            item_data['id'] = item_doc.id
             
             display_name = item_data.get('item_name', '')
             quantity = item_data.get('quantity', '1')
             unit = item_data.get('unit', '')
 
-            # Format item name for display with quantity and unit
             if quantity and quantity != '1':
                 display_name = f"{quantity} {unit} {display_name}".strip()
             elif unit:
                 display_name = f"{unit} {display_name}".strip()
-            item_data['name'] = display_name # Update 'name' key for display purposes
+            item_data['name'] = display_name
 
             items.append(item_data)
 
@@ -124,14 +111,10 @@ def index():
 
     return render_template('index.html', items=items, recommendations=recommendations)
 
-# --- API Endpoints for Voice Commands and List Management ---
+# --- API Routes - Moved Outside of index() Function ---
 
 @app.route('/api/process_voice_command', methods=['POST'])
 def process_voice_command_api():
-    """
-    API endpoint to receive transcribed voice commands from the frontend.
-    It uses the NLP model to interpret the command and performs Firestore actions.
-    """
     print("--- process_voice_command_api route hit! ---") # Debugging print
     data = request.json
     command_text = data.get('command')
@@ -140,7 +123,7 @@ def process_voice_command_api():
         return jsonify({"status": "error", "message": "No command provided."}), 400
 
     print(f"\n--- Received Command Text: '{command_text}' ---")
-    # Import process_command locally within this function to avoid circular imports if nlp_model depends on app
+    # Import process_command locally within this function
     from nlp_model import process_command 
     nlp_output = process_command(command_text)
     intent = nlp_output['intent']
@@ -157,50 +140,42 @@ def process_voice_command_api():
     response_message = "I'm not sure how to handle that. Can you try rephrasing?"
     status_type = "info"
     
-    # --- Handle Different Intents ---
     if intent == 'add_item':
         added_count = 0
-        added_item_names = [] # To store names of actually added items for the response message
-
-        # nlp_output['items'] is now a list of dictionaries: [{'name': 'milk', 'quantity': '2', 'unit': 'liters'}]
+        added_item_names = []
         for item_obj in nlp_output['items']:
             item_name = item_obj['name']
-            quantity = item_obj.get('quantity', '1') # Default to '1' if not provided by NLP
-            unit = item_obj.get('unit', '')           # Default to '' if not provided by NLP
+            quantity = item_obj.get('quantity', '1')
+            unit = item_obj.get('unit', '')
 
-            # When checking for existing items, query Firestore for precise duplicates
             existing_items_query = db.collection('list_items').where('list_id', '==', current_list_id)\
-                                    .where('item_name', '==', item_name)\
-                                    .where('quantity', '==', quantity)\
-                                    .where('unit', '==', unit)\
-                                    .where('is_bought', '==', False).limit(1).stream()
-            existing_item_doc = next(existing_items_query, None) # Get the first matching document or None
+                                    .where('item_name', '==', item_name).where('quantity', '==', quantity)\
+                                    .where('unit', '==', unit).where('is_bought', '==', False).limit(1).stream()
+            existing_item_doc = next(existing_items_query, None)
 
             if not existing_item_doc:
                 new_item_data = {
                     "list_id": current_list_id,
                     "item_name": item_name,
-                    "quantity": quantity, # Save quantity
-                    "unit": unit,         # Save unit
-                    "added_timestamp": firestore.SERVER_TIMESTAMP, # Use server timestamp
+                    "quantity": quantity,
+                    "unit": unit,
+                    "added_timestamp": firestore.SERVER_TIMESTAMP,
                     "is_bought": False,
-                    "note": nlp_output['note'] # Use the extracted general note
+                    "note": nlp_output['note']
                 }
-                new_item_ref = db.collection('list_items').add(new_item_data)[1] # Add document to Firestore
+                new_item_ref = db.collection('list_items').add(new_item_data)[1]
                 
-                # Log to user history
                 user_history_data = {
                     "item_name": item_name,
                     "timestamp": firestore.SERVER_TIMESTAMP,
                     "action_type": 'added',
-                    "list_item_id": new_item_ref.id # Store the ID of the newly added list item
+                    "list_item_id": new_item_ref.id
                 }
                 db.collection('user_history').add(user_history_data)
                 
                 added_count += 1
-                # Format for response message: "2 liters milk" or "milk"
                 display_name = f"{quantity} {unit} {item_name}".strip()
-                if quantity == "1" and not unit: # For items like "milk" (quantity 1, no unit)
+                if quantity == "1" and not unit:
                     display_name = item_name
                 added_item_names.append(display_name)
             
@@ -213,37 +188,46 @@ def process_voice_command_api():
 
     elif intent == 'remove_item':
         removed_count = 0
-        deleted_item_names = [] # To collect names of items actually removed
-        items_to_delete_refs = [] # Collect document references to delete
+        deleted_item_names = []
+        items_to_delete_refs = []
 
         if nlp_output['dish_name']: # If a dish name is provided (e.g., "delete biryani items")
             dish_name_lower = nlp_output['dish_name'].lower()
             
-            # Find items with a note referring to the dish
-            dish_note_items_query = db.collection('list_items').where('list_id', '==', current_list_id)\
-                                    .where('is_bought', '==', False).stream()
-            for doc in dish_note_items_query:
+            # Retrieve all unbought items for the current list
+            all_unbought_items_query = db.collection('list_items').where('list_id', '==', current_list_id)\
+                                        .where('is_bought', '==', False).stream()
+            
+            items_to_consider_for_deletion = []
+            for doc in all_unbought_items_query:
                 item_data = doc.to_dict()
-                # Check if 'note' field exists and if dish_name_lower is in the note
-                if item_data.get('note') and dish_name_lower in item_data['note'].lower():
-                    items_to_delete_refs.append(doc.reference)
-                    # Format for response message
-                    deleted_item_names.append(f"{item_data.get('quantity', '')} {item_data.get('unit', '')} {item_data.get('item_name', '')}".strip())
+                item_data['id'] = doc.id # Add ID for reference
+                items_to_consider_for_deletion.append(item_data)
 
-            # Import RECIPES_DATA from recipe_manager for recipe-based removal
+            # 1. Match items by dish name in their note (e.g., "for chitranna")
+            for item_data in items_to_consider_for_deletion:
+                note_content = item_data.get('note', '').lower()
+                if f"for {dish_name_lower}" in note_content:
+                    items_to_delete_refs.append(db.collection('list_items').document(item_data['id']))
+                    deleted_item_names.append(f"{item_data.get('quantity', '')} {item_data.get('unit', '')} {item_data.get('item_name', '')}".strip())
+            
+            # 2. Match items by ingredient name for the given dish
             from recipe_manager import RECIPES_DATA
             recipe_ingredients = RECIPES_DATA.get(dish_name_lower, [])
             
             if recipe_ingredients:
                 for ingredient_name in recipe_ingredients:
-                    matching_items_by_name_query = db.collection('list_items').where('list_id', '==', current_list_id)\
-                                                    .where('item_name', '==', ingredient_name).where('is_bought', '==', False).stream()
-                    for doc in matching_items_by_name_query:
-                        if doc.reference not in items_to_delete_refs: # Avoid adding duplicates
-                            items_to_delete_refs.append(doc.reference)
-                            item_data = doc.to_dict()
+                    for item_data in items_to_consider_for_deletion:
+                        # Check if item name matches an ingredient and hasn't been marked for deletion yet
+                        if item_data['item_name'].lower() == ingredient_name.lower() and \
+                           db.collection('list_items').document(item_data['id']) not in items_to_delete_refs:
+                            
+                            items_to_delete_refs.append(db.collection('list_items').document(item_data['id']))
                             deleted_item_names.append(f"{item_data.get('quantity', '')} {item_data.get('unit', '')} {item_data.get('item_name', '')}".strip())
             
+            # Remove duplicates from deleted_item_names (if an item matched by note AND ingredient)
+            deleted_item_names = list(dict.fromkeys(deleted_item_names))
+
             if not items_to_delete_refs:
                 response_message = f"No items related to '{nlp_output['dish_name']}' found on your list to remove."
                 status_type = "info"
@@ -298,15 +282,13 @@ def process_voice_command_api():
 
     elif intent == 'mark_bought':
         bought_count = 0
-        bought_item_names = [] # To collect names of items actually marked
+        bought_item_names = []
 
-        # Iterate through structured item objects from NLP
         for item_obj in nlp_output['items']:
             item_name_nlp = item_obj['name']
             quantity_nlp = item_obj.get('quantity', '1')
             unit_nlp = item_obj.get('unit', '')
 
-            # When searching to mark bought, match by name, quantity, and unit if provided by NLP
             query = db.collection('list_items').where('list_id', '==', current_list_id)\
                       .where('item_name', '==', item_name_nlp).where('is_bought', '==', False)
             if quantity_nlp and quantity_nlp != '1':
@@ -317,8 +299,8 @@ def process_voice_command_api():
             item_to_mark_doc = next(query.limit(1).stream(), None)
 
             if item_to_mark_doc:
-                item_to_mark_doc.reference.update({'is_bought': True}) # Update Firestore document
-                item_data = item_to_mark_doc.to_dict() # Get updated data for history logging
+                item_to_mark_doc.reference.update({'is_bought': True})
+                item_data = item_to_mark_doc.to_dict()
                 
                 user_history_data = {
                     "item_name": item_data.get('item_name', 'Unknown Item'),
@@ -329,7 +311,6 @@ def process_voice_command_api():
                 db.collection('user_history').add(user_history_data)
                 
                 bought_count += 1
-                # Format the name for the response message
                 display_name = f"{item_data.get('quantity', '')} {item_data.get('unit', '')} {item_data.get('item_name', '')}".strip()
                 if item_data.get('quantity', '1') == "1" and not item_data.get('unit'):
                     display_name = item_data.get('item_name', '')
@@ -345,14 +326,15 @@ def process_voice_command_api():
     elif intent == 'get_recipe_ingredients':
         dish_name = nlp_output.get('dish_name')
         if dish_name:
-            # Import get_ingredients_for_dish locally
-            from recipe_manager import get_ingredients_for_dish
-            ingredients = get_ingredients_for_dish(dish_name)
-            if ingredients:
+            recipe_doc_ref = db.collection('recipes').document(dish_name.lower())
+            recipe_doc = recipe_doc_ref.get()
+
+            if recipe_doc.exists:
+                ingredients_query = recipe_doc_ref.collection('ingredients').stream()
+                ingredients = [doc.to_dict()['name'] for doc in ingredients_query]
+                
                 added_recipe_items = []
                 for ingredient_name in ingredients:
-                    # For recipe ingredients, we assume quantity '1' and no unit unless specified in recipe_manager's data
-                    # Check if item (case-insensitive) already exists and is not bought
                     existing_item_query = db.collection('list_items').where('list_id', '==', current_list_id)\
                                         .where('item_name', '==', ingredient_name).where('is_bought', '==', False).limit(1).stream()
                     existing_item_doc = next(existing_item_query, None)
@@ -365,8 +347,8 @@ def process_voice_command_api():
                         new_item_data = {
                             "list_id": current_list_id,
                             "item_name": ingredient_name,
-                            "quantity": "1", # Default quantity for recipe items
-                            "unit": "",      # Default unit for recipe items
+                            "quantity": "1",
+                            "unit": "",
                             "added_timestamp": firestore.SERVER_TIMESTAMP,
                             "is_bought": False,
                             "note": item_note_text
@@ -402,35 +384,9 @@ def process_voice_command_api():
     # This ensures a response is always returned if none of the above intents are matched.
     return jsonify({"status": status_type, "message": response_message})
 
-# NEW: API endpoint to clear the entire shopping list
-@app.route('/api/clear_list', methods=['POST'])
-def clear_list_api():
-    """
-    API endpoint to clear all items from the default shopping list in Firestore.
-    """
-    current_list_doc_ref = db.collection('shopping_lists').document('my_shopping_list')
-    current_list_doc = current_list_doc_ref.get()
-
-    if current_list_doc.exists:
-        # Get all items in the list_items subcollection and delete them
-        # Use a batch delete for efficiency if there are many items
-        batch = db.batch()
-        items_to_delete = db.collection('list_items').where('list_id', '==', current_list_doc.id).stream()
-        
-        for item_doc in items_to_delete:
-            # Optionally log these to user history as 'cleared' or 'bulk_removed'
-            # For simplicity, we are just deleting here.
-            item_doc.reference.delete() # Direct delete for each item. For large lists, you'd use batch.delete(item_doc.reference)
-            
-        # If using batch: batch.commit()
-        
-        return jsonify({"status": "success", "message": "Shopping list cleared."}), 200
-    return jsonify({"status": "error", "message": "Shopping list not found."}), 404
-
 
 @app.route('/api/get_list_items', methods=['GET'])
 def get_list_items_api():
-    """Returns all unbought items for the default shopping list as JSON from Firestore."""
     current_list_doc_ref = db.collection('shopping_lists').document('my_shopping_list')
     current_list_doc = current_list_doc_ref.get()
     
@@ -442,41 +398,38 @@ def get_list_items_api():
     
     for item_doc in items_query:
         item_data = item_doc.to_dict()
-        item_data['id'] = item_doc.id # Add document ID for frontend use
+        item_data['id'] = item_doc.id
         
         display_name = item_data.get('item_name', '')
         quantity = item_data.get('quantity', '1')
         unit = item_data.get('unit', '')
 
-        # Format item name for display with quantity and unit
         if quantity and quantity != '1':
             display_name = f"{quantity} {unit} {display_name}".strip()
-        elif unit: # If unit exists but quantity is 1 or empty
-             display_name = f"{unit} {display_name}".strip()
+        elif unit:
+            display_name = f"{unit} {display_name}".strip()
         
-        item_data['name'] = display_name # Update 'name' key for display purposes
+        item_data['name'] = display_name
         items_for_display.append(item_data)
 
     return jsonify(items_for_display), 200
 
 @app.route('/api/get_recommendations', methods=['GET'])
 def get_recommendations_api():
-    """Returns smart recommendations as JSON from Firestore."""
     current_list_doc_ref = db.collection('shopping_lists').document('my_shopping_list')
     current_list_doc = current_list_doc_ref.get()
 
     if not current_list_doc.exists:
-        return jsonify(["Milk", "Eggs", "Bread", "Coffee"]), 200 # Default recommendations if no list exists
+        return jsonify(["Milk", "Eggs", "Bread", "Coffee"]), 200
 
+    # Import get_smart_recommendations locally within this function
     from recommender import get_smart_recommendations
     recommendations = get_smart_recommendations(db, current_list_doc.id) 
+
     return jsonify(recommendations), 200
 
 @app.route('/api/edit_item', methods=['POST'])
 def edit_item():
-    """
-    API endpoint to edit an existing list item's name, quantity, unit, and note in Firestore.
-    """
     data = request.json
     item_id = data.get('item_id')
     new_item_name = data.get('item_name')
@@ -491,7 +444,6 @@ def edit_item():
     item_doc = item_doc_ref.get()
 
     if item_doc.exists:
-        # Update specific fields in the Firestore document
         item_doc_ref.update({
             'item_name': new_item_name,
             'quantity': new_quantity,
@@ -499,7 +451,6 @@ def edit_item():
             'note': new_note
         })
         
-        # Format for response message
         display_name = f"{new_quantity or ''} {new_unit or ''} {new_item_name}".strip()
         if new_quantity == "1" and not new_unit:
             display_name = new_item_name
@@ -507,10 +458,8 @@ def edit_item():
         return jsonify({"status": "success", "message": f"Item '{display_name}' updated."}), 200
     return jsonify({"status": "error", "message": "Item not found."}), 404
 
-
 @app.route('/api/toggle_item_bought', methods=['POST'])
 def toggle_item_bought():
-    """Toggles the 'is_bought' status of a list item in Firestore."""
     item_id = request.json.get('item_id')
     
     item_doc_ref = db.collection('list_items').document(item_id)
@@ -519,18 +468,18 @@ def toggle_item_bought():
     if item_doc.exists:
         current_is_bought = item_doc.to_dict().get('is_bought', False)
         new_is_bought = not current_is_bought
-        item_doc_ref.update({'is_bought': new_is_bought}) # Update Firestore document
+        item_doc_ref.update({'is_bought': new_is_bought})
         
         action = 'bought' if new_is_bought else 'unmarked_bought'
-        item_data = item_doc.to_dict() # Get data for history logging
+        item_data = item_doc.to_dict()
 
         user_history_data = {
             "item_name": item_data.get('item_name', 'Unknown Item'),
             "timestamp": firestore.SERVER_TIMESTAMP,
             "action_type": action,
-            "list_item_id": item_id
+            "list_item_id": item_to_mark_doc.id
         }
-        db.collection('user_history').add(user_history_data) # Add to history collection
+        db.collection('user_history').add(user_history_data)
         
         display_name = f"{item_data.get('quantity', '')} {item_data.get('unit', '')} {item_data.get('item_name', '')}".strip()
         if item_data.get('quantity', '1') == "1" and not item_data.get('unit'):
@@ -541,7 +490,6 @@ def toggle_item_bought():
 
 @app.route('/api/delete_item', methods=['POST'])
 def delete_item_api():
-    """Deletes a list item permanently from Firestore."""
     item_id = request.json.get('item_id')
 
     item_doc_ref = db.collection('list_items').document(item_id)
@@ -549,7 +497,7 @@ def delete_item_api():
 
     if item_doc.exists:
         item_data = item_doc.to_dict()
-        item_doc_ref.delete() # Delete from Firestore
+        item_doc_ref.delete()
         
         user_history_data = {
             "item_name": item_data.get('item_name', 'Unknown Item'),
@@ -557,7 +505,7 @@ def delete_item_api():
             "action_type": 'deleted',
             "list_item_id": item_id
         }
-        db.collection('user_history').add(user_history_data) # Add to history collection
+        db.collection('user_history').add(user_history_data)
 
         display_name = f"{item_data.get('quantity', '')} {item_data.get('unit', '')} {item_data.get('item_name', '')}".strip()
         if item_data.get('quantity', '1') == "1" and not item_data.get('unit'):
@@ -567,7 +515,5 @@ def delete_item_api():
     return jsonify({"status": "error", "message": "Item not found."}), 404
 
 if __name__ == '__main__':
-    # When running on 0.0.0.0, the app will be accessible from any device
-    # on the same network using the host computer's IP address.
-    # For example: http://<your_computer_ip_address>:5000
+    print("Attempting to run Flask app...")
     app.run(host='0.0.0.0', debug=True, port=5000)
