@@ -1,0 +1,126 @@
+/* Custom CSS for AuraList */
+
+/* --- General Body and Container Styling --- */
+body {
+    font-family: 'Inter', sans-serif; /* Ensuring Inter font is applied */
+    background-attachment: fixed; /* Fixes background gradient for a smoother scroll */
+}
+
+.container {
+    max-width: 90%; /* Make container slightly wider on larger screens */
+    animation: slide-up 0.8s ease-out forwards; /* Initial animation on load */
+}
+
+/* --- Heading Animation --- */
+@keyframes fade-in {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+    animation: fade-in 0.8s ease-out forwards;
+}
+
+.animate-fade-in-delay {
+    animation: fade-in 1s ease-out forwards;
+    animation-delay: 0.2s; /* Staggered animation */
+    opacity: 0; /* Hide until animation starts */
+}
+
+/* --- Button Hover Effects --- */
+/* This specific rule for the microphone button's inner span creates a ripple effect */
+#startRecognitionBtn span {
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    transition: width 0.4s ease-out, height 0.4s ease-out, opacity 0.4s ease-out;
+}
+
+#startRecognitionBtn:hover span {
+    width: 200%;
+    height: 200%;
+    opacity: 0;
+}
+
+/* Base button styles from Tailwind are good, these are supplementary */
+button {
+    transition: all 0.2s ease-in-out;
+}
+
+button:hover {
+    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2); /* Deeper shadow on hover */
+}
+
+button:active {
+    transform: translateY(1px); /* Slight press effect */
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+/* --- Status Message Styling --- */
+.status-message {
+    min-height: 24px; /* Ensure consistent height to prevent layout shifts */
+    font-weight: 500;
+}
+
+.text-green-600 { color: #22c55e; } /* Tailwind green */
+.text-yellow-600 { color: #eab308; } /* Tailwind yellow */
+.text-red-600 { color: #ef4444; }   /* Tailwind red */
+
+/* --- Loading Spinner Animation --- */
+.spinner {
+    border: 4px solid rgba(0, 0, 0, 0.1);
+    border-top: 4px solid #6366f1; /* Tailwind indigo-500 */
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* --- List Item Editing Input Styling --- */
+.edit-input {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 1px solid #d1d5db; /* gray-300 */
+    border-radius: 0.375rem; /* rounded-md */
+    font-size: 1.125rem; /* text-lg */
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); /* shadow-sm */
+    transition: all 0.15s ease-in-out;
+}
+
+.edit-input:focus {
+    outline: none;
+    border-color: #6366f1; /* indigo-500 */
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2); /* ring-indigo-500 with opacity */
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+    .container {
+        padding: 1.5rem;
+    }
+    h1 {
+        font-size: 3rem; /* Smaller heading on small screens */
+    }
+    p {
+        font-size: 1rem;
+    }
+    #startRecognitionBtn {
+        font-size: 1.5rem;
+        padding: 1.25rem 2rem;
+    }
+    .text-lg {
+        font-size: 1rem; /* Smaller text for list items */
+    }
+    .edit-input {
+        font-size: 1rem;
+    }
+}

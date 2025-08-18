@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AuraList: Your Smart Shopping Assistant</title>
+    <!-- Tailwind CSS CDN for quick styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter Font from Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <!-- Font Awesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <!-- Custom CSS for specific styles or overrides -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="font-inter bg-gradient-to-br from-purple-700 to-blue-500 flex items-center justify-center min-h-screen p-4">
+    <div class="container bg-white shadow-2xl rounded-3xl p-8 max-w-2xl w-full transform transition-all duration-300 hover:scale-[1.01] border-4 border-white border-opacity-30">
+        <h1 class="text-6xl font-extrabold text-center text-indigo-800 mb-6 drop-shadow-lg animate-fade-in">AuraList ✨</h1>
+        <p class="text-xl text-center text-gray-700 mb-8 font-light leading-relaxed animate-fade-in-delay">Speak your shopping needs, and let AuraList smartly organize it for you.</p>
+
+        <!-- Voice Input Section -->
+        <div class="voice-input-section bg-gradient-to-r from-indigo-100 to-purple-100 p-8 rounded-2xl mb-8 shadow-xl border border-indigo-200 transform transition-transform duration-300 hover:scale-[1.005]">
+            <button id="startRecognitionBtn" class="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold py-5 px-8 rounded-full text-2xl tracking-wide shadow-lg transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-indigo-300 active:from-indigo-800 active:to-purple-800 relative overflow-hidden">
+                <span class="absolute inset-0 bg-white opacity-20 transform scale-0 group-hover:scale-100 group-hover:opacity-0 transition-all duration-500 rounded-full"></span>
+                <i class="fas fa-microphone mr-3"></i> Start Speaking
+            </button>
+            <p id="transcriptOutput" class="text-center text-gray-800 text-lg mt-4 font-medium animate-fade-in-delay">Click the microphone to begin.</p>
+            <div id="statusMessage" class="status-message text-center text-sm mt-2 text-gray-600 min-h-[20px] animate-fade-in-delay"></div>
+            
+            <!-- Loading Spinner for Processing Feedback -->
+            <div id="loadingSpinner" class="flex justify-center items-center mt-4 hidden animate-spin-slow">
+                <div class="spinner border-t-4 border-b-4 border-indigo-500 rounded-full w-10 h-10 animate-spin"></div>
+                <span class="text-gray-600 ml-3 font-medium">Aura is thinking...</span>
+            </div>
+        </div>
+
+        <!-- Shopping List Section -->
+        <div class="shopping-list-section mb-8 bg-white p-6 rounded-2xl shadow-xl border border-gray-100">
+            <h2 class="text-3xl font-semibold text-gray-800 mb-4 border-b-2 pb-2 border-gray-200">Your Shopping List 🛒</h2>
+            <ul id="shoppingList" class="bg-gray-50 p-4 rounded-xl shadow-inner divide-y divide-gray-200 border border-gray-100">
+                <!-- Items will be loaded here by JavaScript -->
+                {% if items %}
+                    {% for item in items %}
+                    <li data-id="{{ item.id }}" class="flex items-center justify-between py-3 px-4 hover:bg-gray-100 transition duration-150 rounded-lg">
+                        <!-- item-content for clickable editing -->
+                        <span class="item-content text-lg text-gray-700 font-medium cursor-pointer flex-grow">
+                            {{ item.name }} {% if item.note %}<span class="text-sm text-gray-500 italic">({{ item.note }})</span>{% endif %}
+                        </span>
+                        <div class="item-actions flex space-x-2 flex-shrink-0">
+                            <button class="mark-bought-btn bg-green-200 hover:bg-green-300 text-green-800 font-semibold py-2 px-4 rounded-full text-sm transition duration-200 focus:outline-none focus:ring-2 focus:ring-green-400 shadow-md hover:shadow-lg">✔️</button>
+                            <button class="delete-item-btn bg-red-200 hover:bg-red-300 text-red-800 font-semibold py-2 px-4 rounded-full text-sm transition duration-200 focus:outline-none focus:ring-2 focus:ring-red-400 shadow-md hover:shadow-lg">🗑️</button>
+                        </div>
+                    </li>
+                    {% endfor %}
+                {% else %}
+                    <li class="py-3 text-gray-500 text-center italic">Your list is currently empty. Start adding items!</li>
+                {% endif %}
+            </ul>
+            <button id="refreshListBtn" class="mt-6 w-full bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-bold py-3 px-4 rounded-lg shadow-md transition duration-200 ease-in-out transform hover:scale-[1.005] focus:outline-none focus:ring-4 focus:ring-blue-300">
+                <i class="fas fa-sync-alt mr-2"></i> Refresh List
+            </button>
+            <!-- NEW: Clear All Items Button -->
+            <button id="clearListBtn" class="mt-4 w-full bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-bold py-3 px-4 rounded-lg shadow-md transition duration-200 ease-in-out transform hover:scale-[1.005] focus:outline-none focus:ring-4 focus:ring-red-300">
+                <i class="fas fa-trash-alt mr-2"></i> Clear All Items
+            </button>
+        </div>
+
+        <!-- Recommendations Section -->
+        <div class="recommendations-section bg-white p-6 rounded-2xl shadow-xl border border-gray-100">
+            <h2 class="text-3xl font-semibold text-gray-800 mb-4 border-b-2 pb-2 border-gray-200">Aura's Smart Suggestions 💡</h2>
+            <ul id="recommendationsList" class="bg-gray-50 p-4 rounded-xl shadow-inner divide-y divide-gray-200 border border-gray-100">
+                <!-- Recommendations will be loaded here by JavaScript -->
+                {% if recommendations %}
+                    {% for rec in recommendations %}
+                    <li class="py-3 text-lg text-gray-700 font-medium hover:bg-gray-100 transition duration-150 rounded-lg px-4">{{ rec }}</li>
+                    {% endfor %}
+                {% else %}
+                    <li class="py-3 text-gray-500 text-center italic">No current suggestions. Add more items and use AuraList frequently for personalized recommendations!</li>
+                {% endif %}
+            </ul>
+        </div>
+    </div>
+
+    <!-- Your custom JavaScript file -->
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

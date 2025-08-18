@@ -1,0 +1,27 @@
+# Virtual Environment
+.venv/
+venv/
+env/
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Database files
+*.sqlite
+auralist.db
+
+# Sensitive Files (CRUCIAL)
+firebase-service-account.json
+
+# Operating System files
+.DS_Store
+Thumbs.db
+
+# IDE and editor files
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# Environment variables
+.env

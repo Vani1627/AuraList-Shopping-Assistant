@@ -1,0 +1,5 @@
+Flask==2.3.2
+firebase-admin==6.3.0
+spacy==3.7.4
+pandas==2.2.2
+gunicorn==22.0.0
