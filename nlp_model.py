@@ -41,12 +41,13 @@ KNOWN_DISHES = [
     "ulundu vadai", "paruppu vadai", "pazham pori", "ullivada", "chakka appam",
     "idiappam",
     # --- North Indian/General Indian Dishes (continued from above) ---
-    "paneer butter masala",
+    "paneer butter masala", "paneer", # Added "paneer" as a dish candidate
     "dal makhani", "gobhi manchurian", "chicken 65", "chilli chicken",
     "palak paneer", "aloo gobi", "matar paneer", "bhindi masala", "chana masala",
     "rajma chawal", "baingan bharta", "lauki kofta", "malai kofta",
     "navratan kurma", "dum aloo", "shahi paneer", "dal tadka", "veg kolhapuri",
     "paneer tikka masala",
+    "veg kurma", # Added "veg kurma" as a dish candidate
     # --- 10 Italian Dishes ---
     "lasagna", "spaghetti carbonara", "risotto ai funghi", "gnocchi with pesto",
     "focaccia bread", "minestrone soup", "tiramisu", "arancini", "osso buco", "caprese salad"
@@ -97,14 +98,19 @@ def process_command(text):
     note = None
     
     # --- Pre-scan for dish_name and primary note (DATE/TIME entities) ---
-    # Prioritize exact matches first, then partial if needed
-    found_exact_dish = False
-    for dish_candidate in KNOWN_DISHES:
-        # Using 'in doc.text' for flexible matching (e.g., "set dosa" matches "dosa")
+    # Sort KNOWN_DISHES by length in descending order to prioritize longer, more specific matches
+    sorted_known_dishes = sorted(KNOWN_DISHES, key=len, reverse=True)
+    
+    # Attempt to find the most specific dish name in the text
+    found_dish_name_candidate = None
+    for dish_candidate in sorted_known_dishes:
+        # Check if the exact dish_candidate string is present in the document's text
+        # This is a less strict check than \b, but combined with sorting, it should be more robust.
         if dish_candidate in doc.text:
-            dish_name = dish_candidate
-            found_exact_dish = True
-            break
+            found_dish_name_candidate = dish_candidate
+            break # Found the longest/most specific match, so break
+
+    dish_name = found_dish_name_candidate
     
     # Prioritize SpaCy's NER for date/time notes ("next Friday")
     for ent in doc.ents:
