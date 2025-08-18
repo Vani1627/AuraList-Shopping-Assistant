@@ -6,6 +6,6 @@ spacy==3.4.4
 thinc==8.1.10
 blis==0.7.8
 numpy==1.26.4
-google-cloud-firestore==2.9.0 # Explicitly added and pinned
+google-cloud-firestore==2.9.1 # UPDATED: Pinned to 2.9.1 to resolve dependency conflict
 # scikit-learn might also be needed if recommender.py uses it implicitly, add if issues arise:
 # scikit-learn==1.3.0
