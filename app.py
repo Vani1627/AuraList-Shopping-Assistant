@@ -4,9 +4,8 @@ from datetime import datetime
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-# Corrected import for FieldFilter
-# This import path is more robust across different google-cloud-firestore versions
-from google.cloud.firestore import FieldFilter
+# Corrected import for FieldFilter, targeting the specific _v1.query module
+from google.cloud.firestore_v1.query import FieldFilter
 
 
 # --- Firebase Initialization ---
