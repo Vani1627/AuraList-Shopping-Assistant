@@ -568,7 +568,6 @@ def delete_item_api():
     return jsonify({"status": "error", "message": "Item not found."}), 404
 
 if __name__ == '__main__':
-    # When running on 0.0.0.0, the app will be accessible from any device
-    # on the same network using the host computer's IP address.
-    # For example: http://<your_computer_ip_address>:5000
-    app.run(host='0.0.0.0', debug=True, port=5000)
+    # Get the port from the environment variable (e.g., set by Render) or default to 5000
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', debug=True, port=port)
