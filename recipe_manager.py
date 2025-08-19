@@ -91,8 +91,9 @@ RECIPES_DATA = {
     "bisi bele bath": ["rice", "toor dal", "mixed vegetables", "bisi bele bath powder", "tamarind", "ghee"],
     "akki roti": ["rice flour", "onions", "green chillies", "dill leaves", "salt", "oil"],
     "ragi rotti": ["ragi flour", "onions", "green chillies", "dill leaves", "salt", "oil"],
+    "ragi roti": ["ragi flour", "onions", "green chillies", "dill leaves", "salt", "oil"],
     "mysore pak": ["besan (gram flour)", "ghee", "sugar"],
-    "obbattu / holige": ["maida", "chana dal", "jaggery", "cardamom"],
+    "obbattu_holige": ["maida", "chana dal", "jaggery", "cardamom"], # Corrected: Replaced '/' with '_'
     "kesari bath": ["rava (semolina)", "sugar", "ghee", "pineapple/banana", "cashews", "raisins", "saffron"],
     "chitranna": ["cooked rice", "lemon juice", "mustard seeds", "curry leaves", "peanuts", "turmeric"],
     "puliyogare": ["cooked rice", "tamarind", "jaggery", "peanuts", "mustard seeds", "curry leaves", "spices"],
@@ -105,6 +106,8 @@ RECIPES_DATA = {
     "mangalore bonda": ["maida", "yogurt", "green chillies", "ginger", "cumin", "oil"],
     "rava dosa": ["rava (semolina)", "rice flour", "maida", "onions", "green chillies", "cumin"],
     "vegetable kurma": ["mixed vegetables", "coconut", "cashews", "poppy seeds", "spices"],
+    "vegetable kuruma": ["mixed vegetables", "coconut", "cashews", "poppy seeds", "spices"], # Alias
+    "veg kurma": ["mixed vegetables", "coconut", "cashews", "poppy seeds", "spices"], # Alias
     "wheat dosa": ["whole wheat flour", "salt", "oil"],
     "adai dosa": ["rice", "mixed lentils", "red chillies", "ginger", "garlic"],
     "kuzhi paniyaram": ["rice", "urad dal", "onions", "green chillies", "oil"],
@@ -131,7 +134,7 @@ RECIPES_DATA = {
     "mint chutney": ["mint leaves", "cilantro", "green chillies", "ginger", "lemon juice"],
     "peanut chutney": ["roasted peanuts", "red chillies", "tamarind", "garlic"],
     "ginger chutney": ["ginger", "red chillies", "tamarind", "jaggery"],
-    "gongura pachadi": ["gongura leaves", "red chillies", "tamarind", "garlic"],
+    "gongura pachadi": ["gongura leaves", "red chillies", "coriander seeds", "cumin seeds"],
     "pesarattu": ["green gram (moong dal)", "rice", "ginger", "green chillies"],
     "mirchi bajji": ["large green chillies", "besan (gram flour)", "rice flour", "spices"],
     "punugulu": ["rice", "urad dal", "idli batter", "onions", "green chillies"],
@@ -155,8 +158,8 @@ RECIPES_DATA = {
     "ullivada": ["onions", "besan (gram flour)", "rice flour", "spices"],
     "chakka appam": ["jackfruit", "rice flour", "jaggery", "coconut"],
     "idiappam": ["rice flour", "water", "salt"],
-    "veg kurma": ["mixed vegetables", "coconut", "cashews", "spices"],
     "paneer butter masala": ["paneer", "tomatoes", "cream", "butter", "cashews", "spices"],
+    "paneer": ["paneer"], # Added for general "paneer" command, can be refined.
     "dal makhani": ["black urad dal", "rajma (kidney beans)", "butter", "cream", "spices"],
     "gobhi manchurian": ["cauliflower", "maida", "corn flour", "soy sauce", "ginger", "garlic", "chillies"],
     "chicken 65": ["chicken", "curry leaves", "green chillies", "ginger", "garlic", "yogurt", "spices"],
@@ -197,31 +200,15 @@ def get_ingredients_for_dish(dish_name):
     normalized_dish_name = dish_name.lower().strip()
     return RECIPES_DATA.get(normalized_dish_name, [])
 
-# This function will be used by app.py to initialize the database with recipes.
-# It requires the Flask app context and SQLAlchemy models.
+# This function is no longer called directly from app.py as recipe population is integrated directly there.
+# It's kept here as a reference if you were to use a different database setup.
 def populate_recipes_db(app, db, Recipe, RecipeIngredient):
     """
-    Populates the Recipe and RecipeIngredient tables from RECIPES_DATA.
+    (Deprecated for current Firestore app.py) Populates the Recipe and RecipeIngredient tables from RECIPES_DATA.
     This function should typically be called once during application startup
     or when migrating/initializing your database.
     """
-    with app.app_context():
-        print("Populating recipe database...")
-        for dish_name, ingredients_list in RECIPES_DATA.items():
-            existing_recipe = Recipe.query.filter_by(name=dish_name).first()
-            if not existing_recipe:
-                recipe = Recipe(name=dish_name)
-                db.session.add(recipe)
-                db.session.flush() # Flush to get recipe.id before committing to session
-
-                for ingredient_name in ingredients_list:
-                    ingredient = RecipeIngredient(recipe_id=recipe.id, ingredient_name=ingredient_name)
-                    db.session.add(ingredient)
-                print(f"Added recipe: {dish_name}")
-            else:
-                print(f"Recipe '{dish_name}' already exists in DB.")
-        db.session.commit()
-        print("Recipe database population complete.")
+    pass # This function is a placeholder now, as Firestore population logic is in app.py
 
 # Example Usage (for testing this module directly via `python recipe_manager.py`)
 if __name__ == "__main__":
@@ -231,4 +218,9 @@ if __name__ == "__main__":
     print(f"Ingredients for Pizza: {get_ingredients_for_dish('Pizza')}")
     print(f"Ingredients for Dosa: {get_ingredients_for_dish('Dosa')}")
     print(f"Ingredients for Lasagna: {get_ingredients_for_dish('Lasagna')}")
+    print(f"Ingredients for Puliyogare: {get_ingredients_for_dish('Puliyogare')}")
+    print(f"Ingredients for Vegetable Kurma: {get_ingredients_for_dish('Vegetable Kurma')}")
+    print(f"Ingredients for Veg Kurma: {get_ingredients_for_dish('Veg Kurma')}")
+    print(f"Ingredients for Paneer: {get_ingredients_for_dish('Paneer')}")
+    print(f"Ingredients for Obbattu Holige: {get_ingredients_for_dish('Obbattu Holige')}") # Test the corrected name
     print(f"Ingredients for Unknown Dish: {get_ingredients_for_dish('Unknown Dish')}") # Should return empty
